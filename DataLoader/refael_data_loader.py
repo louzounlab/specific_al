@@ -64,22 +64,22 @@ DATA_TARGET_FOLDER = "data_by_time"
 
 
 class RefaelDataLoader:
-    def __init__(self, data_path, params, days_split=10, start_day=10):
-        self._all_beta_path = ALL_BETA_PATH + "_split_" + str(days_split) + ".pkl"
-        self._start_day = start_day
+    def __init__(self, data_path, params):
+        # number of dais represented by one time interval
+        self._time_split = self._params['days_split']
+        self._all_beta_path = ALL_BETA_PATH + "_split_" + str(self._time_split) + ".pkl"
+        self._start_interval = self._params['start_interval']
         # where to save splitted graph
-        self._target_path = os.path.join(DATA_TARGET_FOLDER, params['database'], "split_" + str(days_split))
+        self._target_path = os.path.join(DATA_TARGET_FOLDER, params['database'], "split_" + str(self._time_split))
         # parameters - dictionary must contain { database: , logger_name: , date_format: , directed :
         # , max_connected : , ftr_pairs : , identical_bar : , context_beta: }
         self._params = params
         self._logger = PrintLogger(self._params['logger_name'])
         self._params['files_path'] = self._target_path
         self._data_path = data_path
-        # number of dais represented by one time interval
-        self._time_split = days_split
         # split to time intervals - only
         self._partition_data()
-        self._timed_graph = self._init_timed_graph()
+        self._timed_graph = None
 
         self.calc_all_times()       # calc all features for all times and save as pickle
         self._time_idx = 0
@@ -89,6 +89,7 @@ class RefaelDataLoader:
         if os.path.exists(self._all_beta_path):
             self._all_times_data = pickle.load(open(self._all_beta_path, "rb"))
             return
+        self._timed_graph = self._init_timed_graph()
         self._all_times_data = []
         # loop over all time intervals
         while self._forward_time():

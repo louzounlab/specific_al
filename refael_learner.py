@@ -12,6 +12,8 @@ class RefaelLearner:
         self._params = {
             'logger_name': "logger",
             # Data parameters
+            'days_split': 10,
+            'start_interval': 1,
             'database': 'Refael',
             'data_file_name': 'Refael_07_18.csv',  # should be in ../data/
             'date_format': "%Y-%m-%d",  # Refael
