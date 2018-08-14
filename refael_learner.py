@@ -1,6 +1,9 @@
+
 from DataLoader.refael_data_loader import RefaelDataLoader
 import os
-from active_learning import ActiveLearning, DistType
+
+from ParametersConf import DistType
+from active_learning import ActiveLearning
 from ml_communities import MLCommunities, LearningMethod
 
 
@@ -9,6 +12,8 @@ class RefaelLearner:
         self._params = {
             'logger_name': "logger",
             # Data parameters
+            'days_split': 10,
+            'start_interval': 1,
             'database': 'Refael',
             'data_file_name': 'Refael_07_18.csv',  # should be in ../data/
             'date_format': "%Y-%m-%d",  # Refael
@@ -21,6 +26,7 @@ class RefaelLearner:
             # ML- parameters
             'learn_method': LearningMethod.RF,
             # AL - parameters
+            'batch_size': 5,
             'eps': 0.01,
             'target_recall': 0.7,
             'dist_type': DistType.Euclidian

@@ -59,66 +59,86 @@ TIME = 'StartTime'
 COMMUNITY = 'Community'
 TARGET = 'target'
 
-ALL_BETA_PATH = "all_times_beta.pkl"
+ALL_BETA_PATH = "all_times_beta"
+DATA_TARGET_FOLDER = "data_by_time"
 
 
 class RefaelDataLoader:
-    def __init__(self ,data_name, data_path, params, days_split=1):
-        self._target_path = os.path.join("data_by_time", data_name, "split_" + str(days_split))
+    def __init__(self, data_path, params):
+        # number of dais represented by one time interval
+        self._time_split = self._params['days_split']
+        self._all_beta_path = ALL_BETA_PATH + "_split_" + str(self._time_split) + ".pkl"
+        self._start_interval = self._params['start_interval']
+        # where to save splitted graph
+        self._target_path = os.path.join(DATA_TARGET_FOLDER, params['database'], "split_" + str(self._time_split))
+        # parameters - dictionary must contain { database: , logger_name: , date_format: , directed :
+        # , max_connected : , ftr_pairs : , identical_bar : , context_beta: }
         self._params = params
         self._logger = PrintLogger(self._params['logger_name'])
         self._params['files_path'] = self._target_path
-        self._data_name = data_name
         self._data_path = data_path
-        self._time_split=days_split
+        # split to time intervals - only
         self._partition_data()
-        self._timed_graph = self._init_timed_graph()
+        self._timed_graph = None
 
-        for i in range(10):
-            self._forward_time()
-
-        # self.calc_all_times()
+        self.calc_all_times()       # calc all features for all times and save as pickle
         self._time_idx = 0
 
+    # load from pkl or calculate and dump
     def calc_all_times(self):
-        if os.path.exists(ALL_BETA_PATH):
-            self._all_times_data = pickle.load(open(ALL_BETA_PATH, "rb"))
+        if os.path.exists(self._all_beta_path):
+            self._all_times_data = pickle.load(open(self._all_beta_path, "rb"))
             return
+        self._timed_graph = self._init_timed_graph()
         self._all_times_data = []
+        # loop over all time intervals
         while self._forward_time():
+            # calc features and beta for each time
             self._all_times_data.append([self._calc_curr_time()])
-        pickle.dump(self._all_times_data, open(ALL_BETA_PATH, "wb"))
+        pickle.dump(self._all_times_data, open(self._all_beta_path, "wb"))
 
+    # init timed graph to time_0 - without calculating features/ beta-vectors
     def _init_timed_graph(self):
-        return TimedGraphs(self._params['database'], files_path=self._params['files_path'], logger=self._logger,
-                           features_meta=ANOMALY_DETECTION_FEATURES, directed=self._params['directed'],
-                           date_format=self._params['date_format'], largest_cc=self._params['max_connected'])
+        return TimedGraphs(self._params['database'], start_time=self._start_day, files_path=self._params['files_path'],
+                           logger=self._logger, features_meta=ANOMALY_DETECTION_FEATURES,
+                           directed=self._params['directed'], date_format=self._params['date_format'],
+                           largest_cc=self._params['max_connected'])
 
+    # split data to time intervals
     def _partition_data(self):
-        if "data_by_time" not in os.listdir("."):
-            os.mkdir("data_by_time")
-        if self._data_name not in os.listdir("data_by_time"):
-            os.mkdir(os.path.join("data_by_time", self._data_name))
-        if "split_" + str(self._time_split) not in os.listdir(os.path.join("data_by_time", self._data_name)):
-            os.mkdir(os.path.join("data_by_time", self._data_name, "split_" + str(self._time_split)))
+        # make target dir
+        if DATA_TARGET_FOLDER not in os.listdir("."):
+            os.mkdir(DATA_TARGET_FOLDER)
+        if self._params['database'] not in os.listdir(DATA_TARGET_FOLDER):
+            os.mkdir(os.path.join(DATA_TARGET_FOLDER, self._params['database']))
+        if "split_" + str(self._time_split) not in os.listdir(os.path.join(DATA_TARGET_FOLDER, self._params['database'])):
+            os.mkdir(os.path.join(DATA_TARGET_FOLDER, self._params['database'], "split_" + str(self._time_split)))
 
+        # open basic data csv (with all edges of all times)
         data_df = pd.read_csv(self._data_path)
         self._format_data(data_df)
+        # make TIME column the index column and sort data by it
         data_df = data_df.set_index(TIME).sort_index()
 
+        # time delta equals number of days for one time interval
         one_day = timedelta(days=self._time_split)
+        # first day is the first row
         curr_day = data_df.first_valid_index()
         file_time = open(path.join(self._target_path, str(curr_day.date())), "wt")
+        # next day is the  floor(<current_day>) + <one_time_interval>
         next_day = curr_day - timedelta(hours=curr_day.hour, minutes=curr_day.minute, seconds=curr_day.second) + one_day
         for curr_day, row in data_df.iterrows():
+            # if curr day is in next time interval
             if curr_day >= next_day:
+                # close and open new file
                 file_time.close()
                 next_day = curr_day - timedelta(hours=curr_day.hour, minutes=curr_day.minute,
                                                 seconds=curr_day.second) + one_day
                 file_time = open(path.join(self._target_path, str(curr_day.date())), "wt")
+
+            # write edge to file
             file_time.write(str(row[SOURCE]) + " " + str(row[DEST]) + " " + str(row[DURATION]) + " "
                             + str(row[COMMUNITY]) + " " + str(row[TARGET]) + "\n")
-
 
     @staticmethod
     def _format_data(graph_df):
@@ -132,6 +152,7 @@ class RefaelDataLoader:
         return flag
 
     def _calc_curr_time(self):
+        # pick best features and calculate beta vectors
         pearson_picker = PearsonFeaturePicker(self._timed_graph, size=self._params['ftr_pairs'],
                                               logger=self._logger, identical_bar=self._params['identical_bar'])
         best_pairs = pearson_picker.best_pairs()
@@ -139,9 +160,9 @@ class RefaelDataLoader:
         return beta.beta_matrix(), best_pairs, self._timed_graph.nodes_count_list(), \
                self._timed_graph.edges_count_list(), self._timed_graph.get_labels()
 
+    # function for outside user they are only returning pre-calculated beta/labels
     def calc_curr_time(self):
-
-        return self._all_times_data[self._time_idx - 1]
+        return self._all_times_data[self._time_idx - 1][0]
 
     def forward_time(self):
         if self._time_idx == len(self._all_times_data):

@@ -46,6 +46,7 @@ class TimedMultiGraphFeatures:
         self._features_matrix_dict = {}
         self._features_calculated = False
         self._initiation()
+        self._changed_communities = []
 
     def get_feature_meta(self):
         return self._features_meta
@@ -66,7 +67,6 @@ class TimedMultiGraphFeatures:
         self._changed_communities = []
 
     def forward_time(self):
-        self._changed_communities = []
         # check time is legal - stops when reaches END
         if self._current_time == self._total_time:
             return False
@@ -182,6 +182,7 @@ class TimedMultiGraphFeatures:
             gnx_ftr.build(should_dump=False, force_build=True)  # build ALL_FEATURES
             self._features_matrix_dict[community] = gnx_ftr.to_matrix(dtype=np.float32, mtype=np.matrix,
                                                                      should_zscore=should_zscore)
+        self._changed_communities = []
 
     def features_matrix_by_indexes(self, graph_start=0, graph_end=0, for_all=False):
         if for_all:
