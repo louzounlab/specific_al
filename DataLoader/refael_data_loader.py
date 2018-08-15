@@ -65,15 +65,15 @@ DATA_TARGET_FOLDER = "data_by_time"
 
 class RefaelDataLoader:
     def __init__(self, data_path, params):
+        # parameters - dictionary must contain { database: , logger_name: , date_format: , directed :
+        # , max_connected : , ftr_pairs : , identical_bar : , context_beta: }
+        self._params = params
         # number of dais represented by one time interval
         self._time_split = self._params['days_split']
         self._all_beta_path = ALL_BETA_PATH + "_split_" + str(self._time_split) + ".pkl"
         self._start_interval = self._params['start_interval']
         # where to save splitted graph
         self._target_path = os.path.join(DATA_TARGET_FOLDER, params['database'], "split_" + str(self._time_split))
-        # parameters - dictionary must contain { database: , logger_name: , date_format: , directed :
-        # , max_connected : , ftr_pairs : , identical_bar : , context_beta: }
-        self._params = params
         self._logger = PrintLogger(self._params['logger_name'])
         self._params['files_path'] = self._target_path
         self._data_path = data_path
@@ -99,7 +99,7 @@ class RefaelDataLoader:
 
     # init timed graph to time_0 - without calculating features/ beta-vectors
     def _init_timed_graph(self):
-        return TimedGraphs(self._params['database'], start_time=self._start_day, files_path=self._params['files_path'],
+        return TimedGraphs(self._params['database'], start_time=self._start_interval, files_path=self._params['files_path'],
                            logger=self._logger, features_meta=ANOMALY_DETECTION_FEATURES,
                            directed=self._params['directed'], date_format=self._params['date_format'],
                            largest_cc=self._params['max_connected'])

@@ -38,3 +38,4 @@ class ActiveLearning:
         time_tag_df = pd.DataFrame.from_dict(time_tag_dict, orient="index").transpose()
         time_tag_df.to_csv(self._dist_type.name + "_output.csv")
         print("the mean num of steps is: " + str(mean_steps / 10))
+        return mean_steps / 10
