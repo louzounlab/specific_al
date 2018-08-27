@@ -12,7 +12,7 @@ class DistType(Enum):
     OneClass = "one_class"
 
 
-BLACK = 0
+WHITE = 1
 
 
 class DistanceCalculator:
@@ -36,25 +36,28 @@ class DistanceCalculator:
 class Learning:
     def __init__(self, batch_size=1):
         self._batch_size = batch_size
+        self._clf = None
 
-    def machine_learning(self, x_train, y_train, x_test, smallest_class, ignore, clf=None):
+    def machine_learning(self, x_train, y_train, x_test, white, ignore, num_trees=100,  max_depth=200, max_features=0.3):
         # smallest class -> 1/0
-        if clf is None:
+        if self._clf is None:
             # n_estimators - number of trees
             # balances -
-            clf = RandomForestClassifier(n_estimators=200, class_weight="balanced")
-        clf.fit(np.asmatrix(x_train, dtype=np.float32), y_train)
-        probs = clf.predict_proba(x_test)
+            self._clf = RandomForestClassifier(n_estimators=num_trees, class_weight="balanced", criterion='gini',
+                                               max_depth=max_depth, max_features=max_features)
+        self._clf.fit(np.asmatrix(x_train, dtype=np.float32), y_train)
+        probs = self._clf.predict_proba(x_test)
+        probs = np.delete(probs, np.argwhere(self._clf.classes_ == white)[0][0], axis=1)  # delete white probability
         # probs closer to 0 -> 0
         # sorting high to low hence the minus sign
-        top_index = (-probs[:, smallest_class]).argsort(kind='heapsort').tolist()  # smallest class black
+        top_index = (-probs.max(axis=1)).argsort(kind='heapsort').tolist()  # smallest class black
         return [i for i in top_index if i not in ignore][0:self._batch_size]
 
 
 class TimedActiveLearning:
     def __init__(self, params, num_black):
         self._init_variables(params)
-        self._smallest_class = BLACK  # who is the black
+        self._white = WHITE  # who is the black
         self._n_black = num_black  # Counter(labels)[BLACK]  # number of blacks
         self._stop_cond = np.round(self._target_recall * self._n_black)  # number of blacks to find - stop condition
 
@@ -63,13 +66,13 @@ class TimedActiveLearning:
         self._batch_size = params['batch_size']
         self._eps = params['eps']
         self._target_recall = params['target_recall']
-
+        self._queries_per_time = params['queries_per_time']
         self._tags = None
 
         # initialize the train objects with copies - COPY
         self._x_test_matrix = None
         self._y_test = None
-        self._x_train_matrix = None
+        self._x_train_matrix = []
         self._x_train_idx = []
         self._y_train = []
 
@@ -97,34 +100,40 @@ class TimedActiveLearning:
         else:
             # idx -> by learning
             top_index = Learning(batch_size=self._batch_size).machine_learning(self._x_train_matrix, self._y_train,
-                                                                               self._x_test_matrix, self._smallest_class
+                                                                               self._x_test_matrix, self._white
                                                                                , self._x_train_idx)
         self._reveal(top_index)
 
     def _reveal(self, top_index):
         for idx in top_index:
-            if self._y_test[idx] == self._smallest_class:
+            if self._y_test[idx] != self._white:
                 self._num_black_found += 1
 
-            self._x_train_idx.append(idx)
             # add feature vec to train
+            self._x_train_matrix = self._x_test_matrix[idx, :] if len(self._x_train_matrix) == 0 else  \
+                np.vstack([self._x_train_matrix, self._x_test_matrix[idx, :]])
+            self._x_train_idx.append(idx)
             self._y_train.append(self._y_test[idx])
-        end = 0
 
     def _forward_time_data(self, beta_matrix, labels):
         self._y_test = labels[:]
         self._x_test_matrix = beta_matrix
-        self._x_train_matrix = np.vstack([self._x_test_matrix[idx, :] for idx in self._x_train_idx]) if self._x_train_idx else None
+        self._x_train_matrix = np.vstack([self._x_test_matrix[idx, :] for idx in self._x_train_idx]) \
+            if self._x_train_idx else []
+
         self._tags = labels  # for display
 
     def step(self, beta_matrix, labels):
         self._forward_time_data(beta_matrix, labels)
-        # first exploration - reveal at least two graph
-        if self._first_time:
-            self._first_time = False
-            self._first_exploration()
-        else:
-            self._explore_exploit()
+        self._time += 1
+        for i in range(self._queries_per_time):
+            # first exploration - reveal at least two graph
+            if self._first_time:
+                self._first_time = False
+                self._first_exploration()
+            else:
+                self._explore_exploit()
+
         print("recall: " + str(self._num_black_found / self._n_black))
         print(str(len(self._x_train_idx)) + " | " + str(len(self._tags)) + " graphs revealed -- " +
               str(len(self._x_train_idx) / len(self._tags)) + "%")

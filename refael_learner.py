@@ -7,6 +7,7 @@ from ml_communities import MLCommunities, LearningMethod
 
 RESULT_PKL_PATH = "results"
 
+
 class RefaelLearner:
     def __init__(self):
         self._params = {
@@ -15,7 +16,7 @@ class RefaelLearner:
             'days_split': 1,
             'start_interval': 10,
             'database': 'Refael',
-            'data_file_name': 'Refael_07_18.csv',  # should be in ../data/
+            'data_file_name': 'multiclass_Refael_07_18.csv',  # should be in ../data/
             'date_format': "%Y-%m-%d",  # Refael
             'directed': True,
             # features + beta vectors parameters
@@ -26,9 +27,11 @@ class RefaelLearner:
             # ML- parameters
             'learn_method': LearningMethod.RF,
             # AL - parameters
-            'batch_size': 5,
+            'batch_size': 2,
+            'queries_per_time': 30,
             'eps': 0.01,
             'target_recall': 0.7,
+            'reveal_target': 0.6,
             'dist_type': DistType.Euclidian
         }
         self._database = RefaelDataLoader(os.path.join("..", "data", self._params['data_file_name']), self._params)
@@ -44,7 +47,7 @@ class RefaelLearner:
             self._ml_learner.forward_time_data(beta_matrix, best_pairs, nodes_list, edges_list, labels)
             self._ml_learner.run()
 
-    def run_al(self):
+    def run_al(self, pkl_result=False):
         if RESULT_PKL_PATH not in os.listdir("."):
             os.mkdir(RESULT_PKL_PATH)
 
@@ -62,12 +65,13 @@ class RefaelLearner:
             revealed.append(rv)
             time += 1
 
-        # save results to pkl
-        pickle.dump([revealed, recall],
-                    open(os.path.join(RESULT_PKL_PATH,
-                         "al_results_split_" + str(int(self._params['days_split'])) +
-                                      "_start_" + str(int(self._params['start_interval'])) +
-                                      "_batch_" + str(int(self._params['batch_size'])) + ".pkl"), "wb"))
+        if pkl_result:
+            # save partial results to pkl
+            pickle.dump([revealed, recall],
+                        open(os.path.join(RESULT_PKL_PATH,
+                             "al_results_split_" + str(int(self._params['days_split'])) +
+                                          "_start_" + str(int(self._params['start_interval'])) +
+                                          "_batch_" + str(int(self._params['batch_size'])) + ".pkl"), "wb"))
         return [revealed, recall]
 
     def run_al_simulation(self):
@@ -75,18 +79,23 @@ class RefaelLearner:
             os.mkdir(RESULT_PKL_PATH)
         results = {}
         for split_interval in range(1, 4):
-            for batch_size in range(1, 21):
+            for batch_size in range(1, 11):
                 self._params['days_split'] = int(split_interval)
                 self._params['batch_size'] = int(batch_size)
                 self._params['start_interval'] = int(12 / split_interval)
+                TOTAL_DAYS = 48
+                TOTAL_COMMUNITIES = 586
+                GOAL = 0.65
+                total_time_intervals = TOTAL_DAYS/split_interval - self._params['start_interval'] + 1
+                self._params['queries_per_time'] = round((GOAL * TOTAL_COMMUNITIES) /
+                                                         (total_time_intervals * batch_size) + 0.5)
                 self._database = RefaelDataLoader(os.path.join("..", "data", self._params['data_file_name']),
                                                   self._params)
                 results[(split_interval, batch_size)] = self.run_al()
-
         pickle.dump(results, open(os.path.join(RESULT_PKL_PATH, "simulation_results.pkl"), "wb"))
 
 
 if __name__ == "__main__":
     r = RefaelLearner()
     r.run_al_simulation()
-    # r.run_al()
+    # r.run_ml()
