@@ -103,7 +103,7 @@ class FeatureCalculator:
         mx = np.matrix([self._get_feature(element) for element in self._params_order(params_order)]).astype(np.float32)
         # infinity is possible due to the change of the matrix type (i.e. overflow from 64 bit to 32 bit)
         mx[np.isinf(mx)] = self._default_val
-        if 1 == mx.shape[0]:
+        if 1 == mx.shape[0] and not 1 == len(params_order):
             mx = mx.transpose()
         if should_zscore:
             mx = z_scoring(mx)  # , axis=0)

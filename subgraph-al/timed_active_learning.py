@@ -12,9 +12,6 @@ class DistType(Enum):
     OneClass = "one_class"
 
 
-WHITE = 1
-
-
 class DistanceCalculator:
     def __init__(self, batch_size=1):
         self._batch_size = batch_size
@@ -38,13 +35,13 @@ class Learning:
         self._batch_size = batch_size
         self._clf = None
 
-    def machine_learning(self, x_train, y_train, x_test, white, ignore, num_trees=100,  max_depth=200, max_features=0.3):
+    def machine_learning(self, x_train, y_train, x_test, white, ignore, num_trees=200,  max_depth=100):
         # smallest class -> 1/0
         if self._clf is None:
             # n_estimators - number of trees
             # balances -
             self._clf = RandomForestClassifier(n_estimators=num_trees, class_weight="balanced", criterion='gini',
-                                               max_depth=max_depth, max_features=max_features)
+                                               max_depth=max_depth)
         self._clf.fit(np.asmatrix(x_train, dtype=np.float32), y_train)
         probs = self._clf.predict_proba(x_test)
         probs = np.delete(probs, np.argwhere(self._clf.classes_ == white)[0][0], axis=1)  # delete white probability
@@ -57,9 +54,10 @@ class Learning:
 class TimedActiveLearning:
     def __init__(self, params, num_black):
         self._init_variables(params)
-        self._white = WHITE  # who is the black
+        self._white = params['white_label']                  # who is the white
         self._n_black = num_black  # Counter(labels)[BLACK]  # number of blacks
         self._stop_cond = np.round(self._target_recall * self._n_black)  # number of blacks to find - stop condition
+        b=0
 
     def _init_variables(self, params):
         self._dist_type = params['dist_type']

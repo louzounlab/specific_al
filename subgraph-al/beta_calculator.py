@@ -1,11 +1,21 @@
-from sklearn import linear_model
-from graphs_al import Graphs
+import os
+import pickle
+
+from sklearn.decomposition import PCA
+
+from graph_features import GraphFeatures
 from loggers import BaseLogger, PrintLogger
 import numpy as np
 from scipy.misc import comb
 
+from timed_graphs import TimedGraphs
+
+MOTIFS_VAR_PATH = os.path.join(os.sep, "home", "oved", "Documents", "networks", "dev", "subgraph_al_ml",
+                               "graph-measures", "features_algorithms")
+
+
 class BetaCalculator:
-    def __init__(self, graphs: Graphs, feature_pairs=None, logger: BaseLogger=None):
+    def __init__(self, graphs: TimedGraphs, feature_pairs=None, logger: BaseLogger=None):
         if logger:
             self._logger = logger
         else:
@@ -40,100 +50,107 @@ class BetaCalculator:
         out_file.close()
 
 
-class LinearContext(BetaCalculator):
-    def __init__(self, graphs: Graphs, feature_pairs, split=1):
-        self._interval = int(graphs.number_of_graphs() / split)
-        self._all_features = []
-        for graph in graphs.graph_names():
-            m = graphs.features_matrix(graph)
-            # self._nodes_for_graph.append(m.shape[0])
-            # append graph features
-            self._all_features.append(m)
-            # append 0.001 for all missing nodes
-            self._all_features.append(np.ones((graphs.nodes_for_graph(graphs.name_to_index(graph)) - m.shape[0],
-                                               m.shape[1])) * 0.001)
-        # create one big matrix of everything - rows: nodes, columns: features
-        self._all_features = np.concatenate(self._all_features)
+class MotifRatio:
+    def __init__(self, graphs: TimedGraphs, is_directed, pca_size=20, logger: BaseLogger=None):
+        self._pca_n_component = pca_size
+        self._is_directed = is_directed                 # are the graphs directed
+        self._index_ftr = None                          # list of ftr names + counter [ ... (ftr_i, 0), (ftr_i, 1) ...]
+        self._beta_matrix = None                        # matrix of vectors for all graphs
+        self._logger = logger if logger else PrintLogger("graphs logger")
+        # self._graph_order = graph_order if graph_order else [g for g in sorted(graph_ftr_dict)]
+        self._graphs = graphs
+        # list index in motif to number of edges in the motif
+        self._motif_index_to_edge_num = {"motif3": self._motif_num_to_number_of_edges(3),
+                                         "motif4": self._motif_num_to_number_of_edges(4)}
+        self._build()
 
-        # all_ftr_graph_index - [ .... last_row_index_for_graph_i ... ]
-        self._all_ftr_graph_index = np.cumsum([0] + graphs.nodes_count_list()).tolist()
-        super(LinearContext, self).__init__(graphs, feature_pairs)
+    def _build(self):
+        # get vector for each graph and stack theme
+        self._beta_matrix = np.vstack([self._feature_vector(g_id) for g_id in self._graphs.graph_names()])
+        # TODO -- PCA + add node and edges data -- not working so good for now
+        # pca = PCA(n_components=self._pca_n_component)
+        # self._beta_matrix = pca.fit_transform(self._beta_matrix)
+        # self._beta_matrix = np.concatenate((self._beta_matrix, np.matrix(self._graphs.nodes_count_list()).T), axis=1)
+        # self._beta_matrix = np.concatenate((self._beta_matrix, np.matrix(self._graphs.edges_count_list()).T), axis=1)
 
-    def _calc_beta(self, gid):
-        beta_vec = []
-        # get features matrix for interval
-        g_index = self._graphs.name_to_index(gid)
+    def beta_matrix(self):
+        return self._beta_matrix
 
-        # cut the relevant part from the matrix off all features according to the interval size (and graph sizes)
-        if g_index < self._interval:
-            context_matrix = self._all_features[0: int(self._all_ftr_graph_index[self._interval]), :]
-        else:
-            context_matrix = self._all_features[int(self._all_ftr_graph_index[g_index - self._interval]):
-                                                int(self._all_ftr_graph_index[g_index]), :]
-        # get features matrix only for current graph
-        g_matrix = self._graphs.features_matrix(gid)
+    # load motif variation file
+    def _load_variations_file(self, level):
+        fname = "%d_%sdirected.pkl" % (level, "" if self._is_directed else "un")
+        fpath = os.path.join(MOTIFS_VAR_PATH, "motif_variations", fname)
+        return pickle.load(open(fpath, "rb"))
 
-        # for every one of the selected features: ftr_i, ftr_j
-        # cf_window: coefficient of the linear regression on ftr_i/j in the in the window [curr - interval: current]
-        # g_ftr_i: [ .... feature_i for node j .... ]
-        # beta_vec = [ ....  mean < g_ftr_j - cf_window * g_ftr_i > .... ]
-        for i, j in self._ftr_pairs:
-            beta_vec.append(np.mean(g_matrix[:, j] -
-                            linear_model.LinearRegression().fit(np.transpose(context_matrix[:, i].T),
-                                                                np.transpose(context_matrix[:, j].T)).coef_[0][0] *
-                            g_matrix[:, i]))
-        return np.asarray(beta_vec)
+    # return dictionary { motif_index: number_of_edges }
+    def _motif_num_to_number_of_edges(self, level):
+        motif_edge_num_dict = {}
+        for bit_sec, motif_num in self._load_variations_file(level).items():
+            motif_edge_num_dict[motif_num] = bin(bit_sec).count('1')
+        return motif_edge_num_dict
 
+    # map matrix rows to features + count if there's more then one from feature
+    def _set_index_to_ftr(self, gnx, gnx_ftr):
+        if not self._index_ftr:
+            sorted_ftr = [f for f in sorted(gnx_ftr) if gnx_ftr[f].is_relevant()]  # fix feature order (names)
+            self._index_ftr = []
+            temp_node = [x for x in gnx.nodes()][0]                                # pick arbitrary node
+            for ftr in sorted_ftr:
+                temp = gnx_ftr[ftr].feature(temp_node).tolist()
+                temp = temp if type(temp) is list else [temp]                      # feature vector for a node
+                # fill list with (ftr, counter)
+                self._index_ftr += self._get_motif_type(ftr, len(temp)) if ftr == 'motif3' or ftr == 'motif4' else \
+                    [(ftr, i) for i in range(len(temp))]
 
+    # get feature vector for a graph
+    def _feature_vector(self, gid):
+        # get gnx gnx
+        gnx, gnx_ftr = self._graphs.features_matrix(gid)
+        ftr_mx = gnx_ftr.to_matrix(dtype=np.float32, mtype=np.matrix, should_zscore=False)
+        final_vec = np.zeros((1, ftr_mx.shape[1]))
 
-class LinearRegBetaCalculator(BetaCalculator):
-    def __init__(self, graphs: Graphs, feature_pairs, single_c=True):
-        self.single_c = single_c
-        self.single_c_calculated = False
-        self.single_c_regression = {}
-        super(LinearRegBetaCalculator, self).__init__(graphs, feature_pairs)
+        self._set_index_to_ftr(gnx, gnx_ftr)
 
-    def _calc_single(self, feature_i, feature_j):
-        # if we calculate a single c over all the graphs
-        f_key = str(feature_i) + "," + str(feature_j)
-        if f_key not in self.single_c_regression:
-            self._ftr_matrix = self._graphs.features_matrix_by_name(for_all=True)
-            self.single_c_regression[f_key] = self._linear_regression(self._ftr_matrix[:, feature_i].T,
-                                                                  self._ftr_matrix[:, feature_j].T)
-        return self.single_c_regression[f_key]
-
-    def _calc_multi(self, feature_vec_i, feature_vec_j):
-        # here we calculate c for each graph separately
-        return self._linear_regression(feature_vec_i, feature_vec_j)
-
-    def _linear_regression(self, x_np, y_np):
-        """
-        :param x_np: numpy array for one feature
-        :param y_np:
-        :return: regression coefficient
-        """
-        x = x_np.tolist()
-        y = y_np.tolist()
-        regression = linear_model.LinearRegression()
-        regression.fit(np.transpose(np.matrix(x)), np.transpose(np.matrix(y)))
-        return regression.coef_[0][0]
-
-    def _calc_beta(self, gid):
-        beta_vec = []
-        for i, j in self._ftr_pairs:
-            ftr_matrix = self._graphs.features_matrix(gid)
-            feature_i = ftr_matrix[:, i].T
-            feature_j = ftr_matrix[:, j].T
-
-            # if we calculate a single c over all the graphs
-            if self.single_c:
-                coef_ij = self._calc_single(i, j)
+        motif3_ratio = None
+        motif4_ratio = None
+        for i, (ftr, ftr_count) in enumerate(self._index_ftr):
+            if ftr == "motif3":
+                # calculate { motif_index: motif ratio }
+                motif3_ratio = self._count_subgraph_motif_by_size(ftr_mx, ftr) if not motif3_ratio else motif3_ratio
+                final_vec[0, i] = motif3_ratio[ftr_count]
+            elif ftr == "motif4":
+                # calculate { motif_index: motif ratio }
+                motif4_ratio = self._count_subgraph_motif_by_size(ftr_mx, ftr) if not motif4_ratio else motif4_ratio
+                final_vec[0, i] = motif4_ratio[ftr_count]
             else:
-                coef_ij = self._calc_multi(feature_i, feature_j)
+                # calculate average of column
+                final_vec[0, i] = np.sum(ftr_mx[:, i]) / ftr_mx.shape[0]
+        return final_vec
 
-            # calculate b_ijk which is defined as the mean on the b for all the vertices of a graph
-            # b_ijk_vec is a vector of b_ijk for all the vertices in the graph
-            b_ijk_vec = feature_j - coef_ij * feature_i
-            b_ijk = np.mean(b_ijk_vec)
-            beta_vec.append(b_ijk)
-        return np.asarray(beta_vec)
+    # return { motif_index: sum motif in index/ total motifs with same edge count }
+    def _count_subgraph_motif_by_size(self, ftr_mat, motif_type):
+        sum_dict = {ftr_count: np.sum(ftr_mat[:, i]) for i, (ftr, ftr_count) in enumerate(self._index_ftr)
+                    if ftr == motif_type}       # dictionary { motif_index: sum column }
+        sum_by_edge = {}                        # dictionary { num_edges_in_motif: sum of  }
+        for motif_count, sum_motif in sum_dict.items():
+            key = self._motif_index_to_edge_num[motif_type][motif_count]
+            sum_by_edge[key] = sum_by_edge.get(key, 0) + sum_motif
+        # rewrite dictionary { motif_index: sum column/ total motifs with same edge count }
+        for motif_count in sum_dict:
+            key = self._motif_index_to_edge_num[motif_type][motif_count]
+            sum_dict[motif_count] = sum_dict[motif_count] / sum_by_edge[key] if sum_by_edge[key] else 0
+        return sum_dict
+
+    # return [ ... (motif_type, counter) ... ]
+    def _get_motif_type(self, motif_type, num_motifs):
+        header = []
+        for i in range(num_motifs):
+            header.append((motif_type, i))
+        return header
+
+    @staticmethod
+    def is_motif(ftr):
+        return ftr == 'motif4' or ftr == "motif3"
+
+
+
