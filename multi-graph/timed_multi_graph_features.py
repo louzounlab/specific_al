@@ -180,8 +180,7 @@ class TimedMultiGraphFeatures:
             gnx_ftr = GraphFeatures(gnx, self._features_meta, dir_path=gnx_path, logger=self._logger,
                                     is_max_connected=largest_cc)
             gnx_ftr.build(should_dump=False, force_build=True)  # build ALL_FEATURES
-            self._features_matrix_dict[community] = gnx_ftr.to_matrix(dtype=np.float32, mtype=np.matrix,
-                                                                     should_zscore=should_zscore)
+            self._features_matrix_dict[community] = (gnx, gnx_ftr)
         self._changed_communities = []
 
     def features_matrix_by_indexes(self, graph_start=0, graph_end=0, for_all=False):

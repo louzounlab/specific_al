@@ -1,9 +1,7 @@
 from feature_meta import NODE_FEATURES
-from multi_graph_features import MultiGraphFeatures
 from loggers import BaseLogger, PrintLogger
 import pickle
 import os
-
 from timed_multi_graph_features import TimedMultiGraphFeatures
 
 """

@@ -1,8 +1,7 @@
 import pickle
 from DataLoader.refael_data_loader import RefaelDataLoader
 import os
-from ParametersConf import DistType
-from timed_active_learning import TimedActiveLearning
+from timed_active_learning import TimedActiveLearning, DistType
 from ml_communities import MLCommunities, LearningMethod
 
 RESULT_PKL_PATH = "results"
@@ -16,9 +15,10 @@ class RefaelLearner:
             'days_split': 1,
             'start_interval': 10,
             'database': 'Refael',
-            'data_file_name': 'multiclass_Refael_07_18.csv',  # should be in ../data/
+            'data_file_name': 'Refael_07_18.csv',  # should be in ../data/
             'date_format': "%Y-%m-%d",  # Refael
             'directed': True,
+            'white_label': 1,
             # features + beta vectors parameters
             'max_connected': False,
             'ftr_pairs': 200,
@@ -34,7 +34,7 @@ class RefaelLearner:
             'reveal_target': 0.6,
             'dist_type': DistType.Euclidian
         }
-        self._database = RefaelDataLoader(os.path.join("..", "data", self._params['data_file_name']), self._params)
+        self._database = RefaelDataLoader(os.path.join("data", self._params['data_file_name']), self._params)
         self._ml_learner = MLCommunities(method=self._params['learn_method'])
         # self._al_learner = ActiveLearning(self._params)
 
@@ -43,8 +43,8 @@ class RefaelLearner:
         while self._database.forward_time():
             print("-----------------------------------    TIME " + str(time) + "    ----------------------------------")
             time += 1
-            beta_matrix, best_pairs, nodes_list, edges_list, labels = self._database.calc_curr_time()
-            self._ml_learner.forward_time_data(beta_matrix, best_pairs, nodes_list, edges_list, labels)
+            beta_matrix, nodes_list, edges_list, labels = self._database.calc_curr_time()
+            self._ml_learner.forward_time_data(beta_matrix, nodes_list, edges_list, labels)
             self._ml_learner.run()
 
     def run_al(self, pkl_result=False):
@@ -59,7 +59,7 @@ class RefaelLearner:
         time = 0
         while self._database.forward_time():
             print("-----------------------------------    TIME " + str(time) + "    ----------------------------------")
-            beta_matrix, best_pairs, nodes_list, edges_list, labels = self._database.calc_curr_time()
+            beta_matrix, nodes_list, edges_list, labels = self._database.calc_curr_time()
             rv, rec = timed_al.step(beta_matrix, labels)
             recall.append(rec)
             revealed.append(rv)
@@ -89,7 +89,7 @@ class RefaelLearner:
                 total_time_intervals = TOTAL_DAYS/split_interval - self._params['start_interval'] + 1
                 self._params['queries_per_time'] = round((GOAL * TOTAL_COMMUNITIES) /
                                                          (total_time_intervals * batch_size) + 0.5)
-                self._database = RefaelDataLoader(os.path.join("..", "data", self._params['data_file_name']),
+                self._database = RefaelDataLoader(os.path.join("data", self._params['data_file_name']),
                                                   self._params)
                 results[(split_interval, batch_size)] = self.run_al()
         pickle.dump(results, open(os.path.join(RESULT_PKL_PATH, "simulation_results.pkl"), "wb"))

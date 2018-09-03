@@ -33,9 +33,9 @@ class MLCommunities:
         self._best_beta_df = None
         self._method = method
 
-    def forward_time_data(self, beta_matrix, best_pairs, nodes, edges, labels):
+    def forward_time_data(self, beta_matrix, nodes, edges, labels):
         self.labels = labels
-        self._beta_pairs = best_pairs
+        self._beta_pairs = [i for i in range(beta_matrix.shape[1])]
         self._beta_matrix = beta_matrix
         self._nodes = nodes
         self._edges = edges
@@ -43,9 +43,9 @@ class MLCommunities:
         self._best_beta_df = self._beta_matrix_to_df(self._beta_pairs)
 
     def run(self):
-        if self._method == LearningMethod.RF:
-            res_df = self._learn_RF(self._pca_df(self._best_beta_df, graph_data=True, min_nodes=10))
-        if self._method == LearningMethod.SVM:
+        if self._method.value == LearningMethod.RF.value:
+            self._learn_RF(self._pca_df(self._best_beta_df, graph_data=True, min_nodes=10))
+        if self._method.value == LearningMethod.SVM.value:
             self._learn_SVM(self._pca_df(self._best_beta_df, graph_data=True, min_nodes=5))
 
     def _beta_matrix_to_df(self, header):
@@ -92,18 +92,17 @@ class MLCommunities:
         return df
 
     def _learn_RF(self, principalComponents):
-        df = pd.DataFrame(columns=['rf-max_depth', 'train_p', 'mean_auc'])
+        df = pd.DataFrame(columns=['train_p', 'mean_auc'])
         # train percentage
-        for train_p in range(70, 90, 5):
-            for max_depth in range(10, 25):
-                cv = StratifiedShuffleSplit(n_splits=1, test_size=1 - float(train_p) / 100)
-                clf_rf = RandomForestClassifier(n_estimators=200, max_features="log2", criterion="gini", max_depth=max_depth)
-                # print(clf_svm)
-                # clf_RF = RandomForestClassifier()
-                scores_svm = cross_val_score(clf_rf, principalComponents, self.labels, cv=cv, scoring='roc_auc')
-                # scores_rf = cross_val_score(clf_RF, self._conf.beta_matrix, self._conf.labels, cv=cv)
-                df.loc[len(df)] = [max_depth, train_p, np.mean(scores_svm)]
-                print([max_depth, train_p, np.mean(scores_svm)])
+        for train_p in range(30, 90, 10):
+            cv = StratifiedShuffleSplit(n_splits=1, test_size=1 - float(train_p) / 100)
+            clf_rf = RandomForestClassifier(n_estimators=200, max_features="log2", criterion="gini", max_depth=15)
+            # print(clf_svm)
+            # clf_RF = RandomForestClassifier()
+            scores_svm = cross_val_score(clf_rf, principalComponents, self.labels, cv=cv, scoring='roc_auc')
+            # scores_rf = cross_val_score(clf_RF, self._conf.beta_matrix, self._conf.labels, cv=cv)
+            df.loc[len(df)] = [train_p, np.mean(scores_svm)]
+            print([train_p, np.mean(scores_svm)])
         return df
 
     def plot_learning_df(self, df):
