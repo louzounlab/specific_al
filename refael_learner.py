@@ -25,7 +25,7 @@ class RefaelLearner:
             'identical_bar': 0.99,
             'context_beta': 1,
             # ML- parameters
-            'learn_method': LearningMethod.RF,
+            'learn_method': LearningMethod.XGBOOST,
             # AL - parameters
             'batch_size': 2,
             'queries_per_time': 30,
@@ -41,11 +41,11 @@ class RefaelLearner:
     def run_ml(self):
         time = 0
         while self._database.forward_time():
-            print("-----------------------------------    TIME " + str(time) + "    ----------------------------------")
+            # print("-----------------------------------    TIME " + str(time) + "    ----------------------------------")
             time += 1
             beta_matrix, nodes_list, edges_list, labels = self._database.calc_curr_time()
             self._ml_learner.forward_time_data(beta_matrix, nodes_list, edges_list, labels)
-            self._ml_learner.run()
+        self._ml_learner.run()
 
     def run_al(self, pkl_result=False):
         if RESULT_PKL_PATH not in os.listdir("."):
@@ -78,8 +78,8 @@ class RefaelLearner:
         if RESULT_PKL_PATH not in os.listdir("."):
             os.mkdir(RESULT_PKL_PATH)
         results = {}
-        for split_interval in range(1, 4):
-            for batch_size in range(1, 11):
+        for split_interval in range(1, 3):
+            for batch_size in range(1, 6):
                 self._params['days_split'] = int(split_interval)
                 self._params['batch_size'] = int(batch_size)
                 self._params['start_interval'] = int(12 / split_interval)
@@ -97,5 +97,5 @@ class RefaelLearner:
 
 if __name__ == "__main__":
     r = RefaelLearner()
-    r.run_al_simulation()
-    # r.run_ml()
+    # r.run_al_simulation()
+    r.run_ml()
