@@ -10,8 +10,9 @@
       <sourceFolder url="file://$MODULE_DIR$/graph-measures/features_algorithms" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/graph-measures" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/DataLoader" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/venv" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="Python 3.6 (specific_al) (1)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="TestRunnerService">

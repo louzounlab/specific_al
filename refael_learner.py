@@ -45,7 +45,7 @@ class RefaelLearner:
             time += 1
             beta_matrix, nodes_list, edges_list, labels = self._database.calc_curr_time()
             self._ml_learner.forward_time_data(beta_matrix, nodes_list, edges_list, labels)
-            self._ml_learner.run()
+        self._ml_learner.run()
 
     def run_al(self, pkl_result=False):
         if RESULT_PKL_PATH not in os.listdir("."):

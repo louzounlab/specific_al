@@ -21,7 +21,7 @@ class TimedGraphs:
         self._largest_cc = largest_cc
         self._date_format = date_format
         self._directed = directed
-        self._database_name = database_name + "_directed:" + str(directed) + "_lcc:" + str(largest_cc)
+        self._database_name = database_name + "_directed_" + str(directed) + "_lcc_" + str(largest_cc)
         self._path = os.path.join('data', self._database_name)
         if logger:
             self._logger = logger

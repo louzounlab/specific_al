@@ -10,8 +10,8 @@ from scipy.misc import comb
 
 from timed_graphs import TimedGraphs
 
-MOTIFS_VAR_PATH = os.path.join(os.sep, "home", "oved", "Documents", "networks", "dev", "subgraph_al_ml",
-                               "graph-measures", "features_algorithms")
+
+MOTIFS_VAR_PATH = os.path.join(os.sep, os.getcwd(), "graph-measures", "features_algorithms")
 
 
 class BetaCalculator:

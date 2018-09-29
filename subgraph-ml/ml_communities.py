@@ -1,3 +1,4 @@
+import csv
 import os
 import warnings
 from enum import Enum
@@ -8,6 +9,7 @@ from sklearn.model_selection import train_test_split
 import feature_meta
 import pandas as pd
 import numpy as np
+import itertools
 from sklearn.decomposition import PCA
 from sklearn.model_selection import ShuffleSplit, cross_val_score, StratifiedShuffleSplit
 from sklearn.svm import SVC
@@ -58,7 +60,7 @@ class MLCommunities:
         if self._method.value == LearningMethod.SVM.value:
             self._learn_SVM(self._pca_df(self._best_beta_df, graph_data=True, min_nodes=5))
         if self._method.value == LearningMethod.XGBOOST.value:
-            self._learn_XGBoost(self._pca_df(self._best_beta_df, graph_data=True, min_nodes=10))
+            self._learn_XGBoost_p(self._pca_df(self._best_beta_df, graph_data=True, min_nodes=10))
 
     def _beta_matrix_to_df(self, header):
         # create header
@@ -87,8 +89,55 @@ class MLCommunities:
 
         return beta_df
 
+    def _learn_XGBoost_p(self, principalComponents):
+        # Create csv in which are columns of parameters and the 2 last columns are AUC-s.
+        # Run over multiple parameters and num_splits (to average) and get results.
+        # After the parameters and results were written in the csv, one can find the parameters which give a maximum
+        # test AUC from the file.
+        if not os.path.exists(os.path.join(os.getcwd(), 'parameter_check')):
+            os.mkdir('parameter_check')
+        # train percentage
+        for train_p in [70]:
+            f = open(os.path.join(os.getcwd(), 'parameter_check', "results_train_p"+str(train_p)+".csv"), 'w')
+            w = csv.writer(f)
+            w.writerow(['gamma', 'max_depth', 'lambda', 'eta', 'min_child_weight', 'subsample', 'ntree_limit',
+                        'train_AUC', 'test_AUC'])
+            for gamma, max_depth, l, eta, min_child_weight, subsample, ntree_limit in \
+                    itertools.product(range(0, 1001, 2), range(3, 17), range(1, 501), range(1, 501), range(1, 101),
+                                      range(500, 1001), range(1, 101)):
+                auc_train = []
+                auc_test = []
+                for num_splits in range(1, 101):
+                    X_train, X_test, y_train, y_test = train_test_split(principalComponents, self.labels,
+                                                                        test_size=1-float(train_p)/100)
+                    X_train, X_eval, y_train, y_eval = train_test_split(X_train, y_train, test_size=0.1)
+                    dtrain = xgb.DMatrix(X_train, y_train, silent=True)
+                    dtest = xgb.DMatrix(X_test, y_test, silent=True)
+                    deval = xgb.DMatrix(X_eval, y_eval, silent=True)
+                    params = {'silent': True, 'gamma': gamma/1000, 'max_depth': max_depth, 'lambda': l/100,
+                              'eta': eta/1000, 'min_child_weight': min_child_weight, 'subsample': subsample/1000}
+                    clf_xgb = xgb.train(params, dtrain=dtrain, evals=[(dtrain, 'train'), (deval, 'eval')],
+                                        early_stopping_rounds=10, verbose_eval=False)
+                    y_score_test = clf_xgb.predict(dtest, ntree_limit=ntree_limit*10)
+                    y_score_train = clf_xgb.predict(dtrain, ntree_limit=ntree_limit*10)
+                    # ROC AUC has a problem with only one class
+                    try:
+                        r1 = roc_auc_score(y_test, y_score_test)
+                    except ValueError:
+                        continue
+                    auc_test.append(r1)
+
+                    try:
+                        r2 = roc_auc_score(y_train, y_score_train)
+                    except ValueError:
+                        continue
+                    auc_train.append(r2)
+                w.writerow([str(gamma/1000), str(max_depth), str(l/100), str(eta/1000), str(min_child_weight),
+                            str(subsample/1000), str(ntree_limit*10), str(np.mean(auc_train)), str(np.mean(auc_test))])
+        return None
+
     def _learn_XGBoost(self, principalComponents):
-        df=pd.DataFrame()
+        df = pd.DataFrame()
         # train percentage
         for train_p in [70]:
             auc_train = []
