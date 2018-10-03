@@ -139,8 +139,8 @@ class RefaelDataLoader:
     def _calc_curr_time(self):
         # pick best features and calculate beta vectors
         beta = MotifRatio(self._timed_graph, is_directed=self._params['directed'])
-        return beta.beta_matrix(), self._timed_graph.nodes_count_list(), \
-               self._timed_graph.edges_count_list(), self._timed_graph.get_labels()
+        return beta.beta_matrix(), self._timed_graph.nodes_count_list(), self._timed_graph.edges_count_list(), \
+               self._timed_graph.get_labels()
 
     # function for outside user they are only returning pre-calculated beta/labels
     def calc_curr_time(self):
