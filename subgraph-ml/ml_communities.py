@@ -92,7 +92,7 @@ class MLCommunities:
     def _learn_XGBoost(self, principalComponents):
         df = pd.DataFrame()
         # train percentage
-        for train_p in range(30, 90, 10):
+        for train_p in [70]:
             auc_train = []
             auc_test = []
             for num_splits in range(1, 501):
