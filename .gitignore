@@ -1,4 +1,4 @@
-*.pkl
+all_times_beta_split_1.pkl
 Refael_07_18.csv
-venv/
-data_by_time/
+venv/*
+data_by_time/*
